@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>FindWords</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+		<script src="js/phaser.min.js"></script>
+		<script src="js/jquery.min.js"></script>
+		
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300&display=swap" rel="stylesheet"> 
+		
+		<style>
+			body{
+				font-family: 'Space Grotesk', sans-serif;
+			}
+			
+			.bluroverlay{
+				backdrop-filter: blur(30px);
+				background-color: rgba(255,255,255,.75);
+				position: fixed;
+				top: 0px;
+				left: 0px;
+				right: 0px;
+				bottom: 0px;
+			}
+		</style>
+		
+		<script src="js/words.js"></script>
+	</head>
+	<body style="user-select: none; background-color: black;">
+	
+	
+	
+		<div id="gamecanvas" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0;"></div>
+		<script>
+			var userWidth = 1920;			
+			var userHeight = 1080;
+			
+			var maxtimerseconds = 120;
+			var maxfailedwordplacements = 10;
+			
+			var failedwordplacement;
+			
+			var right = 0;
+			var down = 0;
+			var rightmult = 300;
+			var downmult = 60;
+			var defaultx = 1150;
+			var defaulty = 170;
+			
+			var mbuh;
+			var userword = "";
+			var lines = [];
+			var graphics;
+			var lastline = { x : 0, y : 0};
+			var dragstarted;
+			var background;
+			var rightpanel;
+			var tmppoints = 0;
+			var userpoints;
+			var timerseconds;
+			var timertext;
+			var time;
+			var timebase;
+			var timefill;
+			var timefillmask;
+			var gamefooter;
+			var backbutton;
+			var seacalogo;
+			var userprofile;
+			var boxes = [];
+			var boxesselected = [];
+			var strikeablewords = [];
+			var collectedwords = [];
+			var filledblocks = [];
+			var correctsfalses = [];
+			var coret;
+			
+			class MainScene extends Phaser.Scene{
+				constructor(){
+					super();
+				}
+				preload(){
+					
+					this.load.on('complete', function(){
+						//
+					});
+					
+					this.load.image("background", "images/dottexture.png");
+					this.load.image("rightpanel", "images/rightpanel.png");
+					this.load.image("box", "images/box.png");
+					this.load.image("time", "images/time.png");
+					this.load.image("timebase", "images/timebase.png");
+					this.load.image("timefill", "images/timefill.png");
+					this.load.image("timefillmask", "images/timefillmask.png");
+					this.load.image("coret", "images/coret.png");
+					this.load.image("boxselect", "images/boxselect.png");
+					this.load.image("cellright", "images/cellright.png");
+					this.load.image("cellwrong", "images/cellwrong.png");
+
+					
+				}
+				create(){
+				
+					mbuh = this;
+					initGraphics();
+					spawnBoxes();
+					fillEmptyBoxes();
+					failedwordplacement = 0;
+					
+					
+				}
+				update(time, delta){
+				
+					if(dragstarted){
+						//console.log(mbuh.input.y);
+						
+						if(mbuh.input.x > 870 || mbuh.input.x < 28){
+							checkUserWord();
+							dragstarted = false;
+						}
+						
+						if(mbuh.input.y < 100 || mbuh.input.y > 980){
+							checkUserWord();
+							dragstarted = false;
+						}
+					}
+					
+				}
+			}
+			
+			var config = {
+				type: Phaser.AUTO,
+				dom: {
+					createContainer: true
+				},
+				scale: {
+					parent: 'gamecanvas',
+					mode: Phaser.Scale.FIT,
+					autoCenter: Phaser.Scale.CENTER_BOTH,
+					width: userWidth,
+					height: userHeight
+				},
+				scene: [ MainScene ]
+			};
+			
+			var game = new Phaser.Game(config);
+			
+			function initGraphics(){
+				background = mbuh.make.image({
+					x: 0,
+					y: 0,
+					key: "background",
+					add: true
+				}).setOrigin(0);
+				
+				rightpanel = mbuh.add.sprite(1000, 130, "rightpanel");
+				rightpanel.setOrigin(0, 0);
+				rightpanel.setScale(1.15);
+				
+				
+				time = mbuh.add.sprite(890, 130, "time");
+				time.setOrigin(0, 0);
+				
+				timebase = mbuh.add.sprite(900, 220, "timebase");
+				timebase.setOrigin(0, 0);
+				timebase.setScale(1, 1.2);
+				
+				timefillmask = mbuh.add.sprite(900, 220, "timefillmask");
+				timefillmask.setOrigin(0, 0);
+				timefillmask.setScale(1, 1.2);
+				
+				timefill = mbuh.add.sprite(900, 220, "timefill"); // timer ends at 880 y -> 660 in 120 seconds, 5.5 per second
+				timefill.setOrigin(0, 0);
+				timefill.setScale(1, 1.2);
+				timefill.mask = new Phaser.Display.Masks.BitmapMask(mbuh, timefillmask);
+				
+				timertext = mbuh.add.text(922, 940, "120", { font: "45px Space Grotesk", color: "yellow" });
+				timertext.setOrigin(0.5, 0.5);
+				
+				userpoints = mbuh.add.text(1460, 870, "Get ready...", { font: "70px Space Grotesk", color: "white" });
+				userpoints.setOrigin(0.5, 0.5); 
+				
+			}
+			
+			function spawnBoxes(){
+
+				var tmpx = 50 + 50;
+				var tmpy = 125 + 50;
+				var incrementx = 117;
+				var incrementy = 122;
+				
+				for(var i = 0; i < 7; i++){
+										
+					for(var x = 0; x < 7; x++){
+						
+						var box = mbuh.add.sprite(tmpx, tmpy, "box");
+						box.setOrigin(.5, .5);
+						box.setScale(1);
+						box.indexx = x;
+						box.indexy = i;
+						
+						//var boxtext = mbuh.add.dom(tmpx, tmpy, "h1", "font-size: 25px; color: green; font-family: 'Space Grotesk', sans-serif;", box.indexx + "-" + box.indexy);
+						//boxtext.setOrigin(0.5, 1);
+						
+						boxes.push(box);
+						tmpx += incrementx;
+						
+						//console.log("Box" + " " + i + " " + x);
+						
+					}
+					
+					tmpy += incrementy;
+					tmpx -= (incrementx * 7);
+					
+				}
+				
+			}
+			
+			
+			function fillEmptyBoxes(){
+				for(var i = 0; i < boxes.length; i++){
+					if(thisboxisEmpty(i)){
+						//put random letter
+						var randomletter;
+						for(r = 0; r < words.length; r++){
+							randomletter += words[r];
+						}
+						
+						//a to z random letter
+						//randomletter = "abcdefghijklmnopqrstuvwxyz";
+						randomletter = randomletter[Phaser.Math.Between(0, randomletter.length-1)];
+						
+						
+						var box = mbuh.add.sprite(0, 0, "box");
+						box.setOrigin(.5, .5);
+						
+						var lettertext = mbuh.add.text(0, 0, randomletter.toUpperCase(), { font: "64px Space Grotesk", color: "white" });
+						lettertext.setOrigin(0.5, 0.5);
+						
+						var container = mbuh.add.container(boxes[i].x, boxes[i].y, [box, lettertext]);
+						container.setInteractive(new Phaser.Geom.Circle(0, 0, 70), Phaser.Geom.Circle.Contains);
+						container.letter = randomletter;
+						container.placementx = boxes[i].x;
+						container.placementy = boxes[i].y;
+						
+						container.on('pointerover', function () {
+							this.setScale(1.1);
+							letterCaptured(this);
+						});
+
+						container.on('pointerout', function () {
+							this.setScale(1);
+						});
+						
+						container.on('pointerdown', function () {
+							dragstarted = true;
+							letterCaptured(this);
+						});
+						
+						container.on('pointerup', function () {
+							dragstarted = false;
+							checkUserWord();
+						});
+						
+						/*
+						
+						
+						filledblocks.push( { x : boxes[i].x, y : boxes[i].y, currentletter : randomletter } );
+						
+						//console.log(JSON.stringify(placement));
+						var lettertext = mbuh.add.text(boxes[i].x, boxes[i].y, randomletter.toUpperCase(), { font: "64px Space Grotesk", color: "white" });											
+							
+						lettertext.setOrigin(0.5, 0.5);
+						
+						*/
+						
+					}
+				}
+				
+				//start the timer
+				startTheTimer();
+				userpoints.text = tmppoints + " pts";
+			}
+			
+			
+			function thisboxisEmpty(z){
+				for(var i = 0; i < filledblocks.length; i++){
+					if(filledblocks[i].x == boxes[z].indexx && filledblocks[i].y == boxes[z].indexy){
+						return false;
+					}
+				}
+				return true;
+			}
+			
+			
+			
+			function letterCaptured(cux){
+				if(dragstarted){
+				
+					var boxselect = mbuh.add.sprite(cux.placementx, cux.placementy, "boxselect");
+					boxselect.setOrigin(.5, .5);
+					boxesselected.push(boxselect);
+					
+					if(userword.length > 0){
+						var line = mbuh.add.graphics();
+						//line.lineStyle(8, 0x00ff00, 1);
+						line.lineStyle(12, 0xffd900, 1);
+						line.lineBetween(lastline.x, lastline.y, cux.placementx, cux.placementy);
+						//line.lineBetween(100, 100, 600, 500);
+						lines.push(line);
+					}
+					
+					userword += cux.letter;
+					
+					lastline.x = cux.placementx;
+					lastline.y = cux.placementy;
+					//console.log("lastline.x "+lastline.x+", lastline.y " +lastline.y+ ", letter.x " +cux.placementx+ ", letter.y " + cux.placementy);
+					
+					//userpoints.text = userword;
+				}
+				
+				
+			}
+			
+			function wordNotCollected(word){
+				for(var i = 0; i < collectedwords.length; i++){
+					if(collectedwords[i] == word){
+						return false;
+					}
+				}
+				return true;
+			}
+			
+			function checkUserWord(){
+			
+				var iscorrect = false;
+				var indextoremove = 0;
+				
+				for(var i = 0; i < words.length; i++){
+					if(words[i] == userword && wordNotCollected(userword)){
+						
+						iscorrect = true;
+						//indextoremove = i;
+						
+						collectedwords.push(userword);
+						break;
+					}
+				}
+				
+				
+				if(!iscorrect){
+					for(var i = 0; i < words.length; i++){
+						if(words[i] == userword.substring(1) && wordNotCollected(userword.substring(1))){
+							iscorrect = true;
+							userword = words[i];
+							collectedwords.push(userword);
+							//indextoremove = i;
+							break;
+						}
+					}
+				}
+				
+				
+				
+				//correctsfalses
+				if(iscorrect){
+					
+					//console.log("Correct! : " + userword);
+					tmppoints += 10;
+					//words.splice(indextoremove, 1);
+					
+					//place the word on right panel
+					
+					var nextx = defaultx + (rightmult * right);
+					var nexty = defaulty + (downmult * down);
+					
+					if(right < 2){
+						right++;
+					}else{
+						down++;
+						right=0;
+					}
+					
+					foundword = mbuh.add.dom(nextx, nexty, "h1", "textAlign: center; font-size: 40px; font-weight: bold; color: white; font-family: 'Space Grotesk', sans-serif;", userword.toUpperCase());
+					foundword.setOrigin(.5, 0.5);
+					
+					for(var i = 0; i < boxesselected.length; i++){
+						var cfs = mbuh.add.sprite(boxesselected[i].x, boxesselected[i].y, "cellright");
+						cfs.setOrigin(.5,.5);
+						correctsfalses.push(cfs);
+					}
+				}else{
+					for(var i = 0; i < boxesselected.length; i++){
+						var cfs = mbuh.add.sprite(boxesselected[i].x, boxesselected[i].y, "cellwrong");
+						cfs.setOrigin(.5,.5);
+						correctsfalses.push(cfs);
+					}
+				}
+				
+				setTimeout(function(){
+					for(var i = 0; i < correctsfalses.length; i++){
+						correctsfalses[i].destroy();
+					}
+					correctsfalses = [];
+				},500);
+				
+				
+				console.log("Recent word: " + userword);
+				
+				userword = "";
+				
+				//Clear lines
+				for(var i = 0; i < lines.length; i++){
+					lines[i].destroy();
+				}
+				
+				//Clear selectboxes
+				for(var i = 0; i < boxesselected.length; i++){
+					boxesselected[i].destroy();
+				}
+				
+				boxesselected = [];
+				
+				userpoints.text = tmppoints + " pts";
+				
+				
+			}
+			
+			
+			function startTheTimer(){
+				timerseconds = maxtimerseconds;
+				$(".bluroverlay").hide();
+				decreaseSeconds();
+			}
+			
+			function decreaseSeconds(){
+			
+				if(timerseconds > 0){
+					setTimeout(function(){
+						timerseconds--;
+						timefill.y += 660/maxtimerseconds;
+						timertext.text = timerseconds;
+						decreaseSeconds();
+					}, 1000);
+				}else{
+					$(".bluroverlay").show();
+					$("#getready").html("Your points: " + tmppoints);
+				}
+				
+			}
+			
+			
+			/////Whatif jalan buntuuuuuuuuuuuuuu? mbuh yo
+			
+			function openurl(url){
+				location.href = url;
+			}
+			
+		</script>
+		
+		
+		<div class="bluroverlay">
+			<div style="display: table; width: 100%; height: 100%;">
+				<div style="display: table-cell; width: 100%; height: 100%; vertical-align: middle; text-align: center; font-size: 50px;" id="getready">Get ready...</div>
+			</div>
+		</div>
+	</body>
+</html>
